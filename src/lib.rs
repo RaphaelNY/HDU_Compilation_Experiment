@@ -89,25 +89,51 @@ impl NFA {
         }
         self.states[state_id].is_accepting = true;
     }
-    
-	fn matches(&self, input: &str) -> bool {
-		let mut current_states = vec![self.start_state];
 
-		for c in input.chars() {
-			let mut next_states = Vec::new();
-			for state_id in current_states {
-				let state = &self.states[state_id];
-				for transition in &state.transitions {
-					if transition.symbol == Some(c) {
-						next_states.push(transition.to_state);
-					}
-				}
-			}
-			current_states = next_states;
-		}
+    fn matches(&self, input: &str) -> bool {
+        let mut current_states = vec![self.start_state];
+        let mut epsilon_closure = self.epsilon_closure(vec![self.start_state]);
 
-		current_states.iter().any(|&state_id| self.states[state_id].is_accepting)
-	}
+        for c in input.chars() {
+            let mut next_states = Vec::new();
+
+            // 只从 epsilon 闭包中的状态转移
+            for state_id in &epsilon_closure {
+                let state = &self.states[*state_id];
+                for transition in &state.transitions {
+                    if transition.symbol == Some(c) {
+                        // 继续发展 epsilon 闭包
+                        let mut temp_closure = self.epsilon_closure(vec![transition.to_state]);
+                        next_states.append(&mut temp_closure);
+                    }
+                }
+            }
+            // 更新当前状态集合为所有能通过读取当前字符到达的状态的 epsilon 闭包
+            epsilon_closure = next_states;
+        }
+
+        // 检查任一最终状态是否为接受状态
+        epsilon_closure.iter().any(|state_id| self.states[*state_id].is_accepting)
+    }
+
+    // Helper function to calculate the epsilon closure of a set of states
+    fn epsilon_closure(&self, states: Vec<usize>) -> Vec<usize> {
+        let mut closure = states.clone();
+        let mut stack = states;
+
+        while let Some(state_id) = stack.pop() {
+            let state = &self.states[state_id];
+            for transition in &state.transitions {
+                if transition.symbol.is_none() && !closure.contains(&transition.to_state) {
+                    closure.push(transition.to_state);
+                    stack.push(transition.to_state);
+                }
+            }
+        }
+
+        closure
+    }
+
 
     pub fn print_nfa(&self) {
         println!("NFA States and Transitions:");
@@ -214,8 +240,7 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
                 let mut closure_nfa = NFA::new();
 
                 // 创建新的初始和接受状态
-                let new_start_state = closure_nfa.add_state(false);
-                let new_accept_state = closure_nfa.add_state(true);
+                let new_start_state = closure_nfa.start_state;
 
                 // 复制原始 NFA 的所有状态到 closure_nfa，并更新转移的索引
                 let mut state_id_map = vec![0; nfa.states.len()];
@@ -232,6 +257,7 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
                     }
                 }
 
+                let new_accept_state = closure_nfa.add_state(true);
                 // 连接新的起始状态到原始 NFA 的起始状态，并允许ε-转移直接到新的接受状态
                 closure_nfa.add_epsilon_transition(new_start_state, state_id_map[nfa.start_state()]);
                 closure_nfa.add_epsilon_transition(new_start_state, new_accept_state);
@@ -247,16 +273,13 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
 
                 // 最终，推回 NFA 栈
                 nfa_stack.push(closure_nfa);
-            },
-
-
+            },// have corrected
             '|' => {
                 let nfa2 = nfa_stack.pop().unwrap();
                 let nfa1 = nfa_stack.pop().unwrap();
                 let mut union_nfa = NFA::new();
 
-                let start_state = union_nfa.add_state(false);
-                let accept_state = union_nfa.add_state(true);
+                let start_state = union_nfa.start_state;
 
                 // 复制 nfa1 到 union_nfa 并更新转移
                 let nfa1_offset = union_nfa.states.len();
@@ -280,6 +303,7 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
                 union_nfa.add_epsilon_transition(start_state, nfa1.start_state() + nfa1_offset);
                 union_nfa.add_epsilon_transition(start_state, nfa2.start_state() + nfa2_offset);
 
+                let accept_state = union_nfa.add_state(true);
                 // 从 nfa1 和 nfa2 的接受状态添加 ε-转移到新的接受状态
                 for idx in 0..nfa1.states.len() {
                     if nfa1.states[idx].is_accepting {
@@ -371,7 +395,8 @@ mod tests {
     fn test_nfa_a_or_b() {
         let regex = "a|b";
         let nfa = build_nfa_from_regex(regex);
-        
+        nfa.print_nfa();
+
         assert!(nfa.matches("a"));
         assert!(nfa.matches("b"));
         assert!(!nfa.matches("ab"));
@@ -393,17 +418,20 @@ mod tests {
     fn test_nfa_a_bc_star() {
         let regex = "a(b|c)*";
         let nfa = build_nfa_from_regex(regex);
-        
+        nfa.print_nfa();
+
         assert!(nfa.matches("abcbcbc"));
         assert!(nfa.matches("a"));
         assert!(nfa.matches("abc"));
-        assert!(!nfa.matches("acb"));
+        assert!(nfa.matches("acb"));
+        assert!(!nfa.matches("ca"));
     }
 
     #[test]
     fn test_nfa_abc() {
-        let regex = "abc|";
+        let regex = "abc";
         let nfa = build_nfa_from_regex(regex);
+        nfa.print_nfa();
         
         assert!(nfa.matches("abc"));
         assert!(!nfa.matches("ab"));
