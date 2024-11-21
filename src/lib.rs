@@ -90,6 +90,42 @@ impl NFA {
         self.states[state_id].is_accepting = true;
     }
 
+    // 复制状态和它们的转移到另一个 NFA
+    fn copy_states_and_transitions(&mut self, other: &NFA, offset: usize) {
+        for state in other.states.iter() {
+            let new_state_id = self.add_state(state.is_accepting);
+            for transition in state.transitions.iter() {
+                let adjusted_to_state = transition.to_state + offset;
+                self.add_transition(new_state_id, adjusted_to_state, transition.symbol.clone());
+            }
+        }
+    }
+
+    // 合并两个 NFA 为一个新的 NFA 使用 | 操作符
+    fn union(&mut self, nfa1: &NFA, nfa2: &NFA) {
+        let start_state = self.start_state;
+        let offset1 = self.states.len();
+        self.copy_states_and_transitions(&nfa1, offset1);
+
+        let offset2 = self.states.len();
+        self.copy_states_and_transitions(&nfa2, offset2);
+
+        self.add_epsilon_transition(start_state, nfa1.start_state + offset1);
+        self.add_epsilon_transition(start_state, nfa2.start_state + offset2);
+
+        let accept_state = self.add_state(true);
+        for idx in 0..nfa1.states.len() {
+            if nfa1.states[idx].is_accepting {
+                self.add_epsilon_transition(idx + offset1, accept_state);
+            }
+        }
+        for idx in 0..nfa2.states.len() {
+            if nfa2.states[idx].is_accepting {
+                self.add_epsilon_transition(idx + offset2, accept_state);
+            }
+        }
+    }
+
     fn matches(&self, input: &str) -> bool {
         let mut current_states = vec![self.start_state];
         let mut epsilon_closure = self.epsilon_closure(vec![self.start_state]);
@@ -134,7 +170,6 @@ impl NFA {
         closure
     }
 
-
     pub fn print_nfa(&self) {
         println!("NFA States and Transitions:");
         for state in &self.states {
@@ -158,6 +193,13 @@ impl NFA {
     }
 }
 
+fn process_operator(operators: &mut Vec<char>, output: &mut String, op: char, precedence: fn(char) -> i32) {
+    while !operators.is_empty() && precedence(*operators.last().unwrap()) >= precedence(op) {
+        output.push(operators.pop().unwrap());
+    }
+    operators.push(op);
+}
+
 pub fn regex_to_postfix(regex: &str) -> String {
     let mut output = String::new();
     let mut operators = Vec::new();
@@ -178,10 +220,7 @@ pub fn regex_to_postfix(regex: &str) -> String {
             'a'..='z' | 'A'..='Z' | '0'..='9' => {
                 if last_was_operand_or_closure {
                     // We add a concatenation operator only if the last character was an operand or a closure
-                    while !operators.is_empty() && precedence(*operators.last().unwrap()) >= precedence('.') {
-                        output.push(operators.pop().unwrap());
-                    }
-                    operators.push('.');
+                    process_operator(&mut operators, &mut output, '.', precedence);
                 }
                 output.push(c);
                 last_was_operand_or_closure = true;
@@ -189,10 +228,7 @@ pub fn regex_to_postfix(regex: &str) -> String {
             '(' => {
                 if last_was_operand_or_closure {
                     // Treat implicit concatenation
-                    while !operators.is_empty() && precedence(*operators.last().unwrap()) >= precedence('.') {
-                        output.push(operators.pop().unwrap());
-                    }
-                    operators.push('.');
+                    process_operator(&mut operators, &mut output, '.', precedence);
                 }
                 operators.push(c);
                 last_was_operand_or_closure = false;
@@ -205,18 +241,12 @@ pub fn regex_to_postfix(regex: &str) -> String {
                 last_was_operand_or_closure = true; // After closing a parenthesis, we can have a concatenation
             },
             '*' => {
-                while !operators.is_empty() && precedence(*operators.last().unwrap()) >= precedence(c) {
-                    output.push(operators.pop().unwrap());
-                }
-                operators.push(c);
+                process_operator(&mut operators, &mut output, c, precedence);
                 // Continue allowing concatenation after a closure
                 last_was_operand_or_closure = true;
             },
             '|' => {
-                while !operators.is_empty() && precedence(*operators.last().unwrap()) >= precedence(c) {
-                    output.push(operators.pop().unwrap());
-                }
-                operators.push(c);
+                process_operator(&mut operators, &mut output, c, precedence);
                 last_was_operand_or_closure = false;
             },
             _ => {},
@@ -278,44 +308,7 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
                 let nfa2 = nfa_stack.pop().unwrap();
                 let nfa1 = nfa_stack.pop().unwrap();
                 let mut union_nfa = NFA::new();
-
-                let start_state = union_nfa.start_state;
-
-                // 复制 nfa1 到 union_nfa 并更新转移
-                let nfa1_offset = union_nfa.states.len();
-                for state in nfa1.states.iter() {
-                    let new_state_id = union_nfa.add_state(state.is_accepting);
-                    for transition in state.transitions.iter() {
-                        union_nfa.add_transition(new_state_id, transition.to_state + nfa1_offset, transition.symbol);
-                    }
-                }
-
-                // 复制 nfa2 到 union_nfa 并更新转移
-                let nfa2_offset = union_nfa.states.len();
-                for state in nfa2.states.iter() {
-                    let new_state_id = union_nfa.add_state(state.is_accepting);
-                    for transition in state.transitions.iter() {
-                        union_nfa.add_transition(new_state_id, transition.to_state + nfa2_offset, transition.symbol);
-                    }
-                }
-
-                // 添加从新起始状态到 nfa1 和 nfa2 起始状态的 ε-转移
-                union_nfa.add_epsilon_transition(start_state, nfa1.start_state() + nfa1_offset);
-                union_nfa.add_epsilon_transition(start_state, nfa2.start_state() + nfa2_offset);
-
-                let accept_state = union_nfa.add_state(true);
-                // 从 nfa1 和 nfa2 的接受状态添加 ε-转移到新的接受状态
-                for idx in 0..nfa1.states.len() {
-                    if nfa1.states[idx].is_accepting {
-                        union_nfa.add_epsilon_transition(idx + nfa1_offset, accept_state);
-                    }
-                }
-                for idx in 0..nfa2.states.len() {
-                    if nfa2.states[idx].is_accepting {
-                        union_nfa.add_epsilon_transition(idx + nfa2_offset, accept_state);
-                    }
-                }
-
+                union_nfa.union(&nfa1, &nfa2);
                 nfa_stack.push(union_nfa);
             },// have corrected
             '.' => {
