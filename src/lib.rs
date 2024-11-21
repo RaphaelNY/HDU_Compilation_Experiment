@@ -212,58 +212,114 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
             '*' => {
                 let nfa = nfa_stack.pop().unwrap();
                 let mut closure_nfa = NFA::new();
-                let start_state = closure_nfa.add_state(false);
-                let accept_state = closure_nfa.add_state(true);
-                let old_start = 0; // Start state of old NFA
-                let old_accept = nfa.accept_state();
-                
-                closure_nfa.add_epsilon_transition(start_state, old_start);
-                closure_nfa.add_epsilon_transition(old_accept, old_start);
-                closure_nfa.add_epsilon_transition(old_accept, accept_state);
-                closure_nfa.add_epsilon_transition(start_state, accept_state);
 
+                // 创建新的初始和接受状态
+                let new_start_state = closure_nfa.add_state(false);
+                let new_accept_state = closure_nfa.add_state(true);
+
+                // 复制原始 NFA 的所有状态到 closure_nfa，并更新转移的索引
+                let mut state_id_map = vec![0; nfa.states.len()];
+                for (index, state) in nfa.states.iter().enumerate() {
+                    let new_state_id = closure_nfa.add_state(state.is_accepting);
+                    state_id_map[index] = new_state_id;
+                }
+
+                // 复制转移
+                for (index, state) in nfa.states.iter().enumerate() {
+                    for trans in &state.transitions {
+                        let symbol = trans.symbol.clone();
+                        closure_nfa.add_transition(state_id_map[index], state_id_map[trans.to_state], symbol);
+                    }
+                }
+
+                // 连接新的起始状态到原始 NFA 的起始状态，并允许ε-转移直接到新的接受状态
+                closure_nfa.add_epsilon_transition(new_start_state, state_id_map[nfa.start_state()]);
+                closure_nfa.add_epsilon_transition(new_start_state, new_accept_state);
+
+                // 从原始 NFA 的接受状态连接到新的接受状态，并添加ε-转移从原始接受状态到原始起始状态（支持重复匹配）
+                let old_accept = state_id_map[nfa.accept_state()];
+                closure_nfa.add_epsilon_transition(old_accept, new_accept_state);
+                closure_nfa.add_epsilon_transition(old_accept, state_id_map[nfa.start_state()]);
+
+                // 设置新的起始状态和接受状态
+                closure_nfa.start_state = new_start_state;
+                closure_nfa.set_accept_state(new_accept_state);
+
+                // 最终，推回 NFA 栈
                 nfa_stack.push(closure_nfa);
             },
+
+
             '|' => {
                 let nfa2 = nfa_stack.pop().unwrap();
                 let nfa1 = nfa_stack.pop().unwrap();
                 let mut union_nfa = NFA::new();
+
                 let start_state = union_nfa.add_state(false);
                 let accept_state = union_nfa.add_state(true);
-                
-                union_nfa.add_epsilon_transition(start_state, nfa1.start_state());
-                union_nfa.add_epsilon_transition(start_state, nfa2.start_state());
-                union_nfa.add_epsilon_transition(nfa1.accept_state(), accept_state);
-                union_nfa.add_epsilon_transition(nfa2.accept_state(), accept_state);
-                
-                nfa_stack.push(union_nfa);
-            },
 
+                // 复制 nfa1 到 union_nfa 并更新转移
+                let nfa1_offset = union_nfa.states.len();
+                for state in nfa1.states.iter() {
+                    let new_state_id = union_nfa.add_state(state.is_accepting);
+                    for transition in state.transitions.iter() {
+                        union_nfa.add_transition(new_state_id, transition.to_state + nfa1_offset, transition.symbol);
+                    }
+                }
+
+                // 复制 nfa2 到 union_nfa 并更新转移
+                let nfa2_offset = union_nfa.states.len();
+                for state in nfa2.states.iter() {
+                    let new_state_id = union_nfa.add_state(state.is_accepting);
+                    for transition in state.transitions.iter() {
+                        union_nfa.add_transition(new_state_id, transition.to_state + nfa2_offset, transition.symbol);
+                    }
+                }
+
+                // 添加从新起始状态到 nfa1 和 nfa2 起始状态的 ε-转移
+                union_nfa.add_epsilon_transition(start_state, nfa1.start_state() + nfa1_offset);
+                union_nfa.add_epsilon_transition(start_state, nfa2.start_state() + nfa2_offset);
+
+                // 从 nfa1 和 nfa2 的接受状态添加 ε-转移到新的接受状态
+                for idx in 0..nfa1.states.len() {
+                    if nfa1.states[idx].is_accepting {
+                        union_nfa.add_epsilon_transition(idx + nfa1_offset, accept_state);
+                    }
+                }
+                for idx in 0..nfa2.states.len() {
+                    if nfa2.states[idx].is_accepting {
+                        union_nfa.add_epsilon_transition(idx + nfa2_offset, accept_state);
+                    }
+                }
+
+                nfa_stack.push(union_nfa);
+            },// have corrected
             '.' => {
                 let nfa2 = nfa_stack.pop().unwrap();
                 let mut nfa1 = nfa_stack.pop().unwrap();
 
-                // 获取nfa1的接受状态并取消其接受状态标记
+                // 获取 nfa1 的接受状态
                 let nfa1_accept_state = nfa1.states.iter().position(|s| s.is_accepting).unwrap();
-                nfa1.states[nfa1_accept_state].is_accepting = false;
+                nfa1.states[nfa1_accept_state].is_accepting = false; // 将 nfa1 的接受状态标记为非接受状态
 
-                // 将nfa1的接受状态直接连接到nfa2的起始状态
-                let offset = nfa1.states.len();
-                for transition in nfa2.states[nfa2.start_state].transitions.clone() {
-                    nfa1.add_transition(nfa1_accept_state, transition.to_state + offset, transition.symbol);
-                }
+                // 计算 nfa2 中状态的偏移量
+                let offset = nfa1.states.len() - 1;  // 调整偏移量以合并到 nfa1 的最后一个状态
 
-                // 将nfa2的其他状态和转移添加到nfa1
-                for state in nfa2.states.into_iter().skip(1) {  // 跳过nfa2的起始状态，因为它已被合并
-                    let new_state_id = nfa1.add_state(state.is_accepting);
+                // 遍历 nfa2 的所有状态和转移，正确添加到 nfa1
+                for state in nfa2.states {
+                    let new_state_id = if state.id == nfa2.start_state {
+                        nfa1_accept_state  // 如果是 nfa2 的起始状态，则合并到 nfa1 的最后一个状态
+                    } else {
+                        nfa1.add_state(state.is_accepting)  // 否则创建新状态
+                    };
+
                     for transition in state.transitions {
                         nfa1.add_transition(new_state_id, transition.to_state + offset, transition.symbol);
                     }
                 }
 
                 nfa_stack.push(nfa1);
-            },
-
+            },// have corrected
             _ => {
                 let mut nfa = NFA::new();
                 let end_state = nfa.add_state(true);
@@ -284,6 +340,18 @@ pub fn build_nfa_from_regex(regex: &str) -> NFA {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_nda_ab() {
+        let regex = "ab";
+        let postfix = regex_to_postfix(regex);
+        println!("Postfix: {}", postfix);
+        let nfa = build_nfa_from_regex(&postfix);
+
+        assert!(nfa.matches("ab"));
+        assert!(!nfa.matches("a"));
+        assert!(!nfa.matches("b"));
+    }
 
     #[test]
     fn test_nfa_ab_star() {
