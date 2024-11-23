@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::Write;
+
 #[allow(unused)]
 struct State {
     id: usize,
@@ -191,6 +194,28 @@ impl NFA {
             }
         }
     }
+
+    // 生成 DOT 格式的图描述
+    pub fn to_dot(&self) -> String {
+        let mut dot_graph = String::from("digraph NFA {\n    rankdir=LR;\n    node [shape = circle];\n");
+
+        for state in &self.states {
+            if state.is_accepting {
+                dot_graph += &format!("    {} [shape = doublecircle];\n", state.id);
+            }
+
+            for transition in &state.transitions {
+                let label = match transition.symbol {
+                    Some(c) => c.to_string(),
+                    None => "ε".to_string(),
+                };
+                dot_graph += &format!("    {} -> {} [label=\"{}\"];\n", state.id, transition.to_state, label);
+            }
+        }
+
+        dot_graph += "}\n";
+        dot_graph
+    }
 }
 
 fn process_operator(operators: &mut Vec<char>, output: &mut String, op: char, precedence: fn(char) -> i32) {
@@ -352,6 +377,12 @@ pub fn build_nfa_from_postfix(postfix: &str) -> NFA {
 pub fn build_nfa_from_regex(regex: &str) -> NFA {
 	let postfix = regex_to_postfix(regex);
 	build_nfa_from_postfix(&postfix)
+}
+
+pub fn write_to_file(filename: &str, contents: &str) -> std::io::Result<()> {
+    let mut file = File::create(filename)?;
+    file.write_all(contents.as_bytes())?;
+    Ok(())
 }
 
 #[cfg(test)]
