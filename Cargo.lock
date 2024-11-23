@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "task2_1"
+name = "task2"
 version = "0.1.0"
