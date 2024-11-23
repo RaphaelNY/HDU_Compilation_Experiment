@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+use crate::dfa::{DFAState, DFA};
+
 #[allow(unused)]
-struct State {
+pub(crate) struct State {
     pub(crate) id: usize,
     pub(crate) transitions: Vec<Transition>,
     pub(crate) is_accepting: bool,
@@ -16,7 +19,7 @@ impl Clone for State {
 }
 
 #[allow(unused)]
-struct Transition {
+pub(crate) struct Transition {
     pub(crate) symbol: Option<char>, // 使用 Option，None 表示 ε 转移
     pub(crate) to_state: usize,
 }
@@ -168,6 +171,83 @@ impl NFA {
         }
 
         closure
+    }
+
+    // 对给定的状态集合和输入字符计算转移后的状态集合的ε闭包
+    pub fn move_and_closure(&self, state_ids: &Vec<usize>, input: char) -> Vec<usize> {
+        let mut move_set = Vec::new();
+        for &state_id in state_ids {
+            for transition in &self.states[state_id].transitions {
+                if let Some(symbol) = transition.symbol {
+                    if symbol == input {
+                        move_set.push(transition.to_state);
+                    }
+                }
+            }
+        }
+        self.epsilon_closure(move_set)
+    }
+
+    // 返回NFA可能的输入字符集合
+    pub fn alphabet(&self) -> Vec<char> {
+        let mut symbols = std::collections::HashSet::new(); // 使用HashSet避免重复
+        for state in &self.states {
+            for transition in &state.transitions {
+                if let Some(symbol) = transition.symbol {
+                    symbols.insert(symbol);
+                }
+            }
+        }
+        let mut alphabet: Vec<char> = symbols.into_iter().collect();
+        alphabet.sort(); // 可选，确保输出有序
+        alphabet
+    }
+
+    pub fn to_dfa(&self) -> DFA {
+        let mut dfa = DFA::new();
+        let initial_closure = self.epsilon_closure(vec![self.start_state]);
+        let mut work_list = vec![initial_closure];
+        let mut seen_states = HashMap::new();
+        let mut state_id = 0;
+
+        // 将初始状态集映射到DFA的起始状态ID，并推入DFA状态列表
+        seen_states.insert(work_list[0].clone(), state_id);
+        dfa.states.push(DFAState { id: state_id, transitions: Vec::new() });
+        dfa.start_state = state_id;  // 标记DFA的起始状态
+
+        // 检查初始状态集是否包含NFA的接受状态
+        if work_list[0].iter().any(|&s| self.states[s].is_accepting) {
+            dfa.accept_states.push(state_id);
+        }
+
+        while let Some(current_states) = work_list.pop() {
+            let current_state_id = seen_states[&current_states];
+
+            for input in self.alphabet() {  // 假设self.alphabet()返回所有可能的输入符号
+                let next_state = self.move_and_closure(&current_states, input);
+                if !next_state.is_empty() {
+                    let next_state_id = if !seen_states.contains_key(&next_state) {
+                        state_id += 1;
+                        seen_states.insert(next_state.clone(), state_id);
+                        work_list.push(next_state.clone());
+                        dfa.states.push(DFAState { id: state_id, transitions: Vec::new() });
+
+                        // 检查新状态集是否包含任何NFA的接受状态
+                        if next_state.iter().any(|&s| self.states[s].is_accepting) {
+                            dfa.accept_states.push(state_id);
+                        }
+
+                        state_id
+                    } else {
+                        seen_states[&next_state]
+                    };
+
+                    dfa.states[current_state_id].transitions.push((input, next_state_id));
+                }
+            }
+        }
+
+        dfa
     }
 
     pub fn print_nfa(&self) {

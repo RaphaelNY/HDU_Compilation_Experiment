@@ -173,6 +173,7 @@ pub fn write_to_file(filename: &str, contents: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
