@@ -1,13 +1,13 @@
 digraph DFA {
     rankdir=LR;
     node [shape = circle];
-    2 [shape = doublecircle];
+    1 [shape = doublecircle];
     3 [shape = doublecircle];
     0 [shape = circle];
     0 -> 1 [label="a"];
-    1 [shape = circle];
     1 -> 2 [label="b"];
+    2 [shape = circle];
     2 -> 3 [label="c"];
-    3 -> 3 [label="c"];
+    3 -> 2 [label="b"];
     0 [color=red];
 }

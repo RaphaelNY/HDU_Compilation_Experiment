@@ -48,37 +48,51 @@ impl DFA {
 		let mut new_accept_states = Vec::new();
 		let mut state_mapping = std::collections::HashMap::new();
 	
-		// First, map old state IDs to new state IDs
-		for (new_id, partition) in partitions.iter().enumerate() {
-			for &old_id in partition {
-				state_mapping.insert(old_id, new_id);
+		// Ensure the initial state is prioritized and mapped to 0
+		let initial_partition_index = partitions.iter().position(|p| p.contains(&self.start_state)).unwrap();
+		for &old_id in &partitions[initial_partition_index] {
+			state_mapping.insert(old_id, 0);
+			if self.accept_states.contains(&old_id) && !new_accept_states.contains(&0) {
+				new_accept_states.push(0);
 			}
 		}
 	
-		// Now create new states using the mappings
-		for (new_id, partition) in partitions.iter().enumerate() {
-			let mut transitions = Vec::new();
+		// Assign new IDs for other partitions
+		let mut new_id = 1;
+		for (index, partition) in partitions.iter().enumerate() {
+			if index == initial_partition_index { continue; } // Skip the initial partition as it's already processed
+	
 			for &old_id in partition {
-				if self.accept_states.contains(&old_id) {
+				state_mapping.insert(old_id, new_id);
+				if self.accept_states.contains(&old_id) && !new_accept_states.contains(&new_id) {
 					new_accept_states.push(new_id);
 				}
+			}
+			new_id += 1;
+		}
+	
+		// Now create new states using the mappings
+		for (_index, partition) in partitions.iter().enumerate() {
+			let mut transitions = Vec::new();
+			for &old_id in partition {
 				for &(symbol, target) in &self.states[old_id].transitions {
 					if let Some(&new_target_id) = state_mapping.get(&target) {
 						transitions.push((symbol, new_target_id));
 					} else {
-						// Handle the case where no mapping is found
-						eprintln!("Error: No mapping found for state {}", target);
+						eprintln!("Error: No mapping found for transition target state {}", target);
 					}
 				}
 			}
 			transitions.sort();
 			transitions.dedup();
-			new_states.push(DFAState { id: new_id, transitions });
+			new_states.push(DFAState { id: *state_mapping.get(&partition[0]).unwrap(), transitions });
 		}
 	
 		self.states = new_states;
 		self.accept_states = new_accept_states;
-	}	
+		self.start_state = 0;  // Keep the start state as 0
+	}
+	
 
 	pub fn minimize(&mut self) {
 		// First, remove unreachable states
