@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
-use trie::TrieNode;
+use crate::trie::TrieNode;
 
 #[derive(Debug, Clone)]
 #[allow(unused)]
 pub struct Grammar {
     non_terminals: HashSet<String>,
     terminals: HashSet<String>,
-    productions: HashMap<String, Vec<String>>,
+    pub(crate) productions: HashMap<String, Vec<String>>,
 }
 
 impl Grammar {
@@ -96,28 +96,57 @@ impl Grammar {
         }
     }
 
-    /// 左公共因子提取
-    fn eliminate_left_common_factor(&mut self) {
-        let mut new_productions = HashMap::new();
-        let mut new_non_terminals = Vec::new();
+    /// 消除左公共因子
+    pub fn eliminate_left_common_factor(&mut self) {
+        let mut new_productions = HashMap::new(); // 用于存储新非终结符的规则
+        let mut new_non_terminals = HashSet::new(); // 用于记录新生成的非终结符
 
         for (non_terminal, candidates) in &self.productions {
-            let mut trie = TrieNode::default();
-            for candidate in candidates {
-                trie.insert(candidate);
-            }
+            // 分组候选式
+            let groups = group_candidates(candidates);
+            let mut updated_parent_rules = HashSet::new(); // 用于去重的父规则
 
-            let extracted = trie.extract_common_prefix(non_terminal);
-            for (nt, prod) in extracted.0 {
-                new_productions.insert(nt, prod);
-            }
-            for nt in extracted.1 {
-                new_non_terminals.push(nt);
+            for (prefix, group_candidates) in groups {
+                let mut trie = TrieNode::default();
+                for candidate in group_candidates {
+                    trie.insert(&candidate);
+                }
+
+                // 打印生成的 Trie 树
+                println!("\nTrie for group {} in {}:", prefix, non_terminal);
+                trie.display(0, "".to_string());
+
+                // 提取公共因子
+                let extracted = trie.extract_common_prefix(non_terminal);
+
+                // 提取父规则部分
+                if let Some(common_prefix_rules) = extracted.0.get(non_terminal) {
+                    for rule in common_prefix_rules {
+                        updated_parent_rules.insert(rule.clone());
+                    }
+                }
+
+                // 合并新生成的规则到 new_productions
+                for (key, value) in extracted.0 {
+                    let unique_rules: HashSet<String> = value.into_iter().collect();
+                    new_productions
+                        .entry(key)
+                        .or_insert_with(Vec::new)
+                        .extend(unique_rules.into_iter());
+                }
+
+                // 添加新非终结符到集合
+                new_non_terminals.extend(extracted.1.into_iter());
             }
         }
 
-        // 更新文法
-        self.productions.extend(new_productions);
+        // 更新新生成的非终结符规则
+        for (key, value) in new_productions {
+            let unique_rules: HashSet<String> = value.into_iter().collect(); // 再次去重
+            self.productions.insert(key, unique_rules.into_iter().collect());
+        }
+
+        // 更新非终结符集合
         self.non_terminals.extend(new_non_terminals);
     }
 
@@ -126,4 +155,18 @@ impl Grammar {
             println!("{} -> {}", non_terminal, productions.join(" | "));
         }
     }
+}
+
+
+// 将候选式按照前缀分组
+fn group_candidates(candidates: &[String]) -> HashMap<String, Vec<String>> {
+    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+
+    for candidate in candidates {
+        // 按第一个字符分组
+        let prefix = candidate.chars().next().unwrap().to_string();
+        groups.entry(prefix).or_insert_with(Vec::new).push(candidate.clone());
+    }
+
+    groups
 }

@@ -1,76 +1,77 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// 定义 Trie 节点
 #[derive(Default)]
 pub(crate) struct TrieNode {
     children: HashMap<char, TrieNode>,
     is_end: bool,
-    productions: Vec<String>,
 }
 
-/// 实现 Trie 树的插入和提取逻辑
 impl TrieNode {
-    fn insert(&mut self, word: &str) {
+    /// 插入候选式到 Trie
+    pub(crate) fn insert(&mut self, word: &str) {
         let mut current = self;
         for ch in word.chars() {
             current = current.children.entry(ch).or_insert_with(TrieNode::default);
         }
         current.is_end = true;
-        current.productions.push(word.to_string());
     }
 
-    fn extract_common_prefix(
+    /// 提取公共前缀并生成新的规则
+    pub(crate) fn extract_common_prefix(
         &self,
         parent_nt: &str,
     ) -> (HashMap<String, Vec<String>>, Vec<String>) {
         let mut new_productions = HashMap::new();
         let mut new_non_terminals = Vec::new();
-        let mut current = vec![];
+        let mut prefix = vec![];
 
-        self.collect_common_prefix(parent_nt, &mut current, &mut new_productions, &mut new_non_terminals);
+        self.collect_common_prefix(parent_nt, &mut prefix, &mut new_productions, &mut new_non_terminals);
         (new_productions, new_non_terminals)
     }
 
-	fn collect_common_prefix(
+    /// 遍历 Trie，提取最长公共前缀
+    fn collect_common_prefix(
         &self,
         parent_nt: &str,
         prefix: &mut Vec<char>,
         new_productions: &mut HashMap<String, Vec<String>>,
         new_non_terminals: &mut Vec<String>,
     ) {
-        // 如果当前节点是公共前缀的分支点或结束节点
+        // 当前节点是分支点或结束节点
         if self.children.len() > 1 || self.is_end {
-            let prefix_string: String = prefix.iter().collect();
-            let new_nt = format!("{}'", parent_nt);
-            let mut new_candidates = vec![];
+            let prefix_string: String = prefix.iter().collect(); // 当前公共前缀
+            let new_nt = format!("{}'", parent_nt); // 生成新非终结符
 
-            // 为每个子分支收集候选式
+            let mut candidates = vec![];
+
+            // 遍历子节点，收集子规则
             for (&ch, child) in &self.children {
-                let mut child_prefix = prefix.clone();
-                child_prefix.push(ch);
-
-                let mut child_candidates = vec![];
-                child.collect_candidates(&mut child_candidates, &child_prefix);
-                new_candidates.push(format!("{}{}", ch, new_nt));
-
-                // 添加新的非终结符规则
-                new_productions.insert(new_nt.clone(), child_candidates);
+                let mut child_prefix = vec![ch];
+                child.collect_candidates(&mut candidates, &mut child_prefix);
             }
 
-            // 如果当前路径有直接的终止候选式
+            // 如果当前路径是结束路径，添加 ε
             if self.is_end {
-                new_candidates.push("ε".to_string());
+                candidates.push("ε".to_string());
             }
 
-            // 更新父节点的候选式
+            // 添加子规则到新非终结符，合并候选式
+            new_productions
+                .entry(new_nt.clone())
+                .or_insert_with(Vec::new)
+                .extend(candidates);
+
+            // 记录新非终结符
+            new_non_terminals.push(new_nt.clone());
+
+            // 父规则添加 公共前缀 + 新非终结符，合并父规则
             new_productions
                 .entry(parent_nt.to_string())
                 .or_insert_with(Vec::new)
                 .push(format!("{}{}", prefix_string, new_nt));
-
-            new_non_terminals.push(new_nt);
         } else {
-            // 继续递归处理公共前缀
+            // 递归处理子节点
             for (&ch, child) in &self.children {
                 prefix.push(ch);
                 child.collect_common_prefix(parent_nt, prefix, new_productions, new_non_terminals);
@@ -79,15 +80,26 @@ impl TrieNode {
         }
     }
 
-    /// 收集所有候选式
-    fn collect_candidates(&self, candidates: &mut Vec<String>, prefix: &Vec<char>) {
+    /// 收集路径下的所有候选式
+    fn collect_candidates(&self, candidates: &mut Vec<String>, prefix: &mut Vec<char>) {
         if self.is_end {
             candidates.push(prefix.iter().collect());
         }
         for (&ch, child) in &self.children {
-            let mut child_prefix = prefix.clone();
-            child_prefix.push(ch);
-            child.collect_candidates(candidates, &child_prefix);
+            prefix.push(ch);
+            child.collect_candidates(candidates, prefix);
+            prefix.pop();
+        }
+    }
+
+    /// 打印当前 Trie 树（用于调试）
+    pub(crate) fn display(&self, depth: usize, prefix: String) {
+        if self.is_end {
+            println!("{}(End)", " ".repeat(depth) + &prefix);
+        }
+        for (&ch, child) in &self.children {
+            let new_prefix = format!("{}{}", prefix, ch);
+            child.display(depth + 2, new_prefix);
         }
     }
 }
