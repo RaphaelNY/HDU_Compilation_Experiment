@@ -22,10 +22,23 @@ impl Grammar {
 
     pub fn add_production(&mut self, non_terminal: &str, production: Vec<&str>) {
         self.non_terminals.insert(non_terminal.to_string());
-        // entry: exist or not; 
         let entry: &mut Vec<String> = self.productions.entry(non_terminal.to_string()).or_insert_with(Vec::new);
         for p in production {
+            // 将产生式添加到对应的列表中
             entry.push(p.to_string());
+            // 按字符迭代处理每个符号
+            for ch in p.chars() {
+                let symbol = ch.to_string();
+                // 检查是否为非终结符
+                if !self.non_terminals.contains(&symbol) && symbol != " " {
+                    self.terminals.insert(symbol);
+                }
+            }
+        }
+        for non_terminal in self.non_terminals.iter() {
+            if self.terminals.contains(non_terminal) {
+                self.terminals.remove(non_terminal);
+            }
         }
     }
 
@@ -152,6 +165,51 @@ impl Grammar {
         }
         // 合并新的非终结符和产生式到文法中
         self.productions.extend(new_rules);
+    }
+
+    pub fn eliminate_first(&self, symbol: &str) -> HashSet<String> {
+        let mut first_set = HashSet::new();
+        if self.terminals.contains(symbol) {
+            first_set.insert(symbol.to_string());
+            return first_set;
+        }
+        if let Some(productions) = self.productions.get(symbol) {
+            'productions: for prod in productions {
+                let symbols: Vec<String> = prod.chars().map(|c| c.to_string()).collect();
+                let mut all_nullable = true;
+
+                for sym in symbols {
+                    if sym == "ε" {
+                        first_set.insert("ε".to_string());
+                        continue;
+                    } else if self.terminals.contains(&sym) {
+                        first_set.insert(sym.to_string());
+                        continue 'productions; // Stop after adding first terminal
+                    }
+
+                    let nested_first = self.eliminate_first(&sym);
+                    first_set.extend(nested_first.clone().into_iter().filter(|s| s != "ε")); // Add all except ε
+
+                    if !nested_first.contains("ε") {
+                        all_nullable = false;
+                        break; // Stop if current symbol cannot produce ε
+                    }
+                }
+
+                if all_nullable {
+                    first_set.insert("ε".to_string()); // If all symbols can produce ε, add ε
+                }
+            }
+        }
+        first_set
+    }
+
+    pub fn calculate_first_sets(&self) -> HashMap<String, HashSet<String>> {
+        let mut first_sets = HashMap::new();
+        for nt in &self.non_terminals {
+            first_sets.insert(nt.clone(), self.eliminate_first(nt));
+        }
+        first_sets
     }
 
     pub fn display(&self) {
