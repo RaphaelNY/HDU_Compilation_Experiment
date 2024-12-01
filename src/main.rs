@@ -2,18 +2,23 @@ use task3::grammar::Grammar;
 fn main() {
     let mut grammar = Grammar::new();
 
-    grammar.add_production("Q", vec!["R Q'"]);
-    grammar.add_production("Q'", vec!["+ R Q'", "ε"]);
-    grammar.add_production("R", vec!["c R'"]);
-    grammar.add_production("R'", vec!["* c R'", "ε"]);
+    grammar.add_production("S", vec!["AB"], true);
+    grammar.add_production("A", vec!["a", "ε"], false);
+    grammar.add_production("B", vec!["b"], false);
 
     println!("Original Grammar:");
     grammar.display();
 
-    let first_sets = grammar.calculate_first_sets();
+    let first_sets = grammar.first_sets.clone();
     println!("\nFIRST Sets:");
     for (nt, fs) in first_sets {
         println!("FIRST({}) = {:?}", nt, fs);
+    }
+
+    let follow_sets = grammar.calculate_follow_sets();
+    println!("\nfollow Sets:");
+    for (nt, fs) in follow_sets.iter() {
+        println!("follow({}) = {:?}", nt, fs);
     }
 }
 

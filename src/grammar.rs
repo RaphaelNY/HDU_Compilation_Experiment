@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use crate::trie::{Trie};
+use crate::trie::Trie;
 
 const DEBUG: bool = true;
 
@@ -8,7 +8,10 @@ const DEBUG: bool = true;
 pub struct Grammar {
     non_terminals: HashSet<String>,
     terminals: HashSet<String>,
+    start_symbol: Option<String>,
     pub(crate) productions: HashMap<String, Vec<String>>,
+    pub first_sets: HashMap<String, HashSet<String>>,
+    pub follow_sets: HashMap<String, HashSet<String>>,
 }
 
 impl Grammar {
@@ -16,11 +19,14 @@ impl Grammar {
         Grammar {
             non_terminals: HashSet::new(),
             terminals: HashSet::new(),
+            start_symbol: None,
             productions: HashMap::new(),
+            first_sets: HashMap::new(),
+            follow_sets: HashMap::new(),
         }
     }
 
-    pub fn add_production(&mut self, non_terminal: &str, production: Vec<&str>) {
+    pub fn add_production(&mut self, non_terminal: &str, production: Vec<&str>, is_start_symbol: bool) {
         self.non_terminals.insert(non_terminal.to_string());
         let entry: &mut Vec<String> = self.productions.entry(non_terminal.to_string()).or_insert_with(Vec::new);
         for p in production {
@@ -40,6 +46,14 @@ impl Grammar {
                 self.terminals.remove(non_terminal);
             }
         }
+
+        // 设置开始符号
+        if is_start_symbol {
+            self.start_symbol = Some(non_terminal.to_string());
+        }
+
+        self.first_sets = self.calculate_first_sets();
+        // self.calculate_follow_sets();
     }
 
     pub fn eliminate_left_recursion(&mut self) {
@@ -210,6 +224,59 @@ impl Grammar {
             first_sets.insert(nt.clone(), self.eliminate_first(nt));
         }
         first_sets
+    }
+
+    pub fn calculate_follow_sets(&mut self) -> HashMap<String, HashSet<String>> {
+        // 初始化 FOLLOW 集
+        for nt in &self.non_terminals {
+            self.follow_sets.entry(nt.clone()).or_insert_with(HashSet::new);
+        }
+        // 设置起始符号的 FOLLOW 集，通常包含一个特殊的结束符号 "$"
+        if let Some(start_symbol) = self.start_symbol.clone() {
+            self.follow_sets.entry(start_symbol.clone()).or_insert_with(HashSet::new).insert("$".to_string());
+        }
+
+        loop {
+            let mut changed = false;
+            for (lhs, productions) in &self.productions {
+                for production in productions {
+                    let symbols: Vec<String> = production.chars().map(|c| c.to_string()).collect();
+                    let mut trailer = self.follow_sets.get(lhs).unwrap().clone();
+
+                    for i in (0..symbols.len()).rev() {
+                        let symbol = &symbols[i];
+                        if self.non_terminals.contains(symbol) {
+                            let before_size = self.follow_sets[symbol].len();
+                            self.follow_sets.get_mut(symbol).unwrap().extend(trailer.clone());
+                            if self.follow_sets[symbol].len() != before_size {
+                                changed = true;
+                            }
+                        }
+
+                        if i > 0 {
+                            trailer.clear();
+                            if self.non_terminals.contains(&symbols[i - 1]) {
+                                if let Some(first_next) = self.first_sets.get(symbol) {
+                                    trailer.extend(first_next.iter().filter(|&n| n != "ε").cloned());
+                                    if first_next.contains("ε") {
+                                        trailer.extend(self.follow_sets.get(lhs).unwrap().iter().cloned());
+                                    }
+                                }
+                            }
+                        }
+                        else {
+                            trailer.clear();
+                            trailer.extend(self.follow_sets.get(lhs).unwrap().iter().cloned());
+                        }
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        self.follow_sets.clone()
     }
 
     pub fn display(&self) {
