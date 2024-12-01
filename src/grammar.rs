@@ -153,6 +153,7 @@ impl Grammar {
         // 合并新的非终结符和产生式到文法中
         self.productions.extend(new_rules);
     }
+
     pub fn display(&self) {
         for (non_terminal, productions) in &self.productions {
             println!("{} -> {}", non_terminal, productions.join(" | "));
