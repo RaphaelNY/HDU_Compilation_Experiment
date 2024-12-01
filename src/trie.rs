@@ -1,105 +1,121 @@
 use std::collections::HashMap;
+use std::fmt;
 
-/// 定义 Trie 节点
+#[derive(Default)]
+pub struct Trie {
+    root: TrieNode,
+}
+
 #[derive(Default)]
 pub(crate) struct TrieNode {
     children: HashMap<char, TrieNode>,
     is_end: bool,
+    count: usize, // 用于计数经过此节点的单词数
+    depth: usize, // 节点深度
+}
+
+impl Trie {
+    // 创建一个新的 Trie 树
+    pub fn new() -> Self {
+        Self { root: TrieNode::new(0) }
+    }
+
+    // 插入单词到 Trie 树中
+    #[allow(unused)]
+    pub fn insert(&mut self, word: &str) {
+        let mut node = &mut self.root;
+        for (i, c) in word.chars().enumerate() {
+            node = node.children.entry(c).or_insert_with(|| TrieNode::new(node.depth + 1));
+            node.count += 1;  // 增加经过此节点的单词计数
+        }
+        node.is_end = true;  // 标记单词结束
+    }
+
+    // 提取最长公共前缀及其分支
+    pub fn extract_longest_common_prefix(&self) -> Vec<(String, Vec<String>)> {
+        let mut results = Vec::new();
+        let current_node = &self.root;
+        let mut stack = vec![(current_node, "".to_string())]; // 用栈来追踪节点和当前前缀
+
+        while let Some((node, prefix)) = stack.pop() {
+            // 判断节点是否是一个有效的分支点
+            if node.children.len() > 1 || (node.is_end && node.children.len() > 0) {
+                let mut branches = Vec::new();
+                // 检查所有子节点
+                for (&c, _child_node) in &node.children {
+                    branches.push(format!("{}{}", prefix, c));
+                }
+                let has_end_child = node.children.values().any(|child| child.is_end);
+                if node.is_end || has_end_child {
+                    // 如果当前节点是结束节点或有多个子节点，记录当前前缀并不再进一步递归
+                    results.push((prefix.clone(), branches));
+                    continue;
+                }
+                // 继续探索所有子节点
+                for (&c, child_node) in &node.children {
+                    stack.push((child_node, format!("{}{}", prefix, c)));
+                }
+            } else if node.children.len() == 1 {
+                // 只有一个子节点并且不是结束点，继续沿这一路径递归
+                let (&c, next_node) = node.children.iter().next().unwrap();
+                if !node.is_end {
+                    stack.push((next_node, format!("{}{}", prefix, c)));
+                } else {
+                    // 如果是结束点但无其他子节点，不再继续
+                    results.push((format!("{}{}", prefix, c), vec![]));
+                }
+            }
+        }
+
+        results
+    }
+
+    // 实现 Display trait 来美观打印 Trie
+    pub fn display(&self) -> String {
+        self.root.display("", false, String::new())
+    }
 }
 
 impl TrieNode {
-    /// 插入候选式到 Trie
-    pub(crate) fn insert(&mut self, word: &str) {
-        let mut current = self;
-        for ch in word.chars() {
-            current = current.children.entry(ch).or_insert_with(TrieNode::default);
-        }
-        current.is_end = true;
-    }
-
-    /// 提取公共前缀并生成新的规则
-    pub(crate) fn extract_common_prefix(
-        &self,
-        parent_nt: &str,
-    ) -> (HashMap<String, Vec<String>>, Vec<String>) {
-        let mut new_productions = HashMap::new();
-        let mut new_non_terminals = Vec::new();
-        let mut prefix = vec![];
-
-        self.collect_common_prefix(parent_nt, &mut prefix, &mut new_productions, &mut new_non_terminals);
-        (new_productions, new_non_terminals)
-    }
-
-    /// 遍历 Trie，提取最长公共前缀
-    fn collect_common_prefix(
-        &self,
-        parent_nt: &str,
-        prefix: &mut Vec<char>,
-        new_productions: &mut HashMap<String, Vec<String>>,
-        new_non_terminals: &mut Vec<String>,
-    ) {
-        // 当前节点是分支点或结束节点
-        if self.children.len() > 1 || self.is_end {
-            let prefix_string: String = prefix.iter().collect(); // 当前公共前缀
-            let new_nt = format!("{}'", parent_nt); // 生成新非终结符
-
-            let mut candidates = vec![];
-
-            // 遍历子节点，收集子规则
-            for (&ch, child) in &self.children {
-                let mut child_prefix = vec![ch];
-                child.collect_candidates(&mut candidates, &mut child_prefix);
-            }
-
-            // 如果当前路径是结束路径，添加 ε
-            if self.is_end {
-                candidates.push("ε".to_string());
-            }
-
-            // 添加子规则到新非终结符，合并候选式
-            new_productions
-                .entry(new_nt.clone())
-                .or_insert_with(Vec::new)
-                .extend(candidates);
-
-            // 记录新非终结符
-            new_non_terminals.push(new_nt.clone());
-
-            // 父规则添加 公共前缀 + 新非终结符，合并父规则
-            new_productions
-                .entry(parent_nt.to_string())
-                .or_insert_with(Vec::new)
-                .push(format!("{}{}", prefix_string, new_nt));
-        } else {
-            // 递归处理子节点
-            for (&ch, child) in &self.children {
-                prefix.push(ch);
-                child.collect_common_prefix(parent_nt, prefix, new_productions, new_non_terminals);
-                prefix.pop();
-            }
+    // 初始化一个新节点
+    pub(crate) fn new(depth: usize) -> Self {
+        TrieNode {
+            children: HashMap::new(),
+            is_end: false,
+            count: 0,
+            depth,
         }
     }
 
-    /// 收集路径下的所有候选式
-    fn collect_candidates(&self, candidates: &mut Vec<String>, prefix: &mut Vec<char>) {
+    // 辅助函数，用于递归显示 Trie
+    fn display(&self, prefix: &str, last: bool, indent: String) -> String {
+        let mut result = String::new();
+
+        // 当前节点的前缀处理
+        let current_prefix = if last { "`-- " } else { "|-- " };
+        let new_indent = if last { "    " } else { "|   " };
+
+        result.push_str(&format!("{}{}{}", indent, current_prefix, prefix));
         if self.is_end {
-            candidates.push(prefix.iter().collect());
+            result.push_str(" (end)");
         }
-        for (&ch, child) in &self.children {
-            prefix.push(ch);
-            child.collect_candidates(candidates, prefix);
-            prefix.pop();
-        }
-    }
+        result.push_str(&format!(" [{}]\n", self.count));
 
-    /// 打印当前 Trie 树（用于调试）
-    pub(crate) fn display(&self, depth: usize, prefix: String) {
-        if self.is_end {
-            println!("{}(End)", " ".repeat(depth) + &prefix);
+        let mut children = self.children.iter().collect::<Vec<(&char, &TrieNode)>>();
+        children.sort_by_key(|&(c, _)| c); // 对子节点排序，确保输出一致性
+
+        for (i, (char, node)) in children.iter().enumerate() {
+            let last_child = i == children.len() - 1;
+            result.push_str(&node.display(&char.to_string(), last_child, format!("{}{}", indent, new_indent)));
         }
-        for (&ch, child) in &self.children {
-            let new_prefix = format!("{}{}", prefix, ch);
-            child.display(depth + 2, new_prefix);
-        }
+
+        result
+    }
+}
+
+// 使用 Display 实现
+impl fmt::Display for Trie {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.display())
     }
 }

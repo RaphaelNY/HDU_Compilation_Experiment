@@ -7,12 +7,11 @@ fn main() {
 
     println!("Original Grammar:");
     grammar.display();
+    println!();
 
     grammar.eliminate_left_common_factor();
-
     println!("\nGrammar after eliminating left common factor:");
     grammar.display();
-
 }
 /*
     let mut grammar = Grammar::new();
