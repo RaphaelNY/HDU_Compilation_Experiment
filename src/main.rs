@@ -1,29 +1,21 @@
+use std::io;
 use task3::grammar::Grammar;
 fn main() {
     let mut grammar = Grammar::new();
+    let (non_terminals, productions) = task3::input();
+    task3::add_prod(&mut grammar, non_terminals, productions);
 
-    grammar.add_production("S", vec!["AB"], true);
-    grammar.add_production("A", vec!["aA", "ε"], false);
-    grammar.add_production("B", vec!["b"], false);
-
-    println!("Original Grammar:");
-    grammar.display();
-
-    if grammar.is_ll1() {
-        println!("The grammar is LL(1)");
-    } else {
-        println!("The grammar is not LL(1)");
+    println!("which task do you want to run?");
+    let mut num = String::new();
+    io::stdin().read_line(&mut num).expect("Failed to read line");
+    let num: u32 = num.trim().parse().expect("Please type a number!");
+    match num {
+        1 => task3::task3_1(&mut grammar),
+        2 => task3::task3_2(&mut grammar),
+        3 => task3::task3_3(&mut grammar),
+        4 => task3::task3_4(&mut grammar),
+        _ => println!("Please type a number between 1 and 4"),
     }
-
-    let table = grammar.create_predictive_parsing_table();
-    grammar.display_predictive_parsing_table(&table);
-
-
-    match grammar.ll1_parse("aab") {
-        Ok(_) => println!("Parsing successful"),
-        Err(err) => println!("Parsing failed: {}", err),
-    }
-
 }
 
 /* 3.1
@@ -99,7 +91,7 @@ fn main() {
     }
 */
 
-/*
+/* 3.4
     let mut grammar = Grammar::new();
 
     grammar.add_production("S", vec!["AB"], true);
