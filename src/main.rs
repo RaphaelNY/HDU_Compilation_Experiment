@@ -9,17 +9,12 @@ fn main() {
     println!("Original Grammar:");
     grammar.display();
 
-    let first_sets = grammar.first_sets.clone();
-    println!("\nFIRST Sets:");
-    for (nt, fs) in first_sets {
-        println!("FIRST({}) = {:?}", nt, fs);
+    if grammar.is_ll1() {
+        println!("The grammar is LL(1)");
+    } else {
+        println!("The grammar is not LL(1)");
     }
 
-    let follow_sets = grammar.follow_sets.clone();
-    println!("\nfollow Sets:");
-    for (nt, fs) in follow_sets.iter() {
-        println!("follow({}) = {:?}", nt, fs);
-    }
 }
 
 /* 3.1

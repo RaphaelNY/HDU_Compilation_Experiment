@@ -279,6 +279,61 @@ impl Grammar {
         self.follow_sets.clone()
     }
 
+    // Check if the grammar is LL(1)
+    pub fn is_ll1(&self) -> bool {
+        for (non_terminal, productions) in &self.productions {
+            for i in 0..productions.len() {
+                for j in (i + 1)..productions.len() {
+                    let first_i = self.first_of(&productions[i]);
+                    let first_j = self.first_of(&productions[j]);
+
+                    // Check FIRST sets intersection
+                    if !first_i.is_disjoint(&first_j) {
+                        return false;
+                    }
+
+                    // If one production can derive epsilon, check FOLLOW sets
+                    if first_i.contains("ε") {
+                        let follow = self.follow_sets.get(non_terminal).unwrap();
+                        if !follow.is_disjoint(&first_j) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    // Helper function to compute the FIRST set of a given production
+    fn first_of(&self, production: &str) -> HashSet<String> {
+        let mut first_set = HashSet::new();
+
+        for symbol in production.chars() {
+            let symbol_str = symbol.to_string();
+            if self.terminals.contains(&symbol_str) {
+                first_set.insert(symbol_str);
+                break;
+            } else if let Some(non_terminal_first) = self.first_sets.get(&symbol_str) {
+                for item in non_terminal_first {
+                    if item != "ε" {
+                        first_set.insert(item.clone());
+                    }
+                }
+
+                if !non_terminal_first.contains("ε") {
+                    break;
+                }
+            }
+        }
+
+        if first_set.is_empty() {
+            first_set.insert("ε".to_string());
+        }
+
+        first_set
+    }
+
     pub fn display(&self) {
         for (non_terminal, productions) in &self.productions {
             println!("{} -> {}", non_terminal, productions.join(" | "));
