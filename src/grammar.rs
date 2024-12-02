@@ -55,8 +55,11 @@ impl Grammar {
             self.start_symbol = Some(non_terminal.to_string());
         }
 
-        self.first_sets = self.calculate_first_sets();
-        self.calculate_follow_sets();
+        if !self.start_symbol.is_none() {
+            self.eliminate_left_recursion();
+            self.first_sets = self.calculate_first_sets();
+            self.calculate_follow_sets();
+        }
     }
 
     pub fn eliminate_left_recursion(&mut self) {
