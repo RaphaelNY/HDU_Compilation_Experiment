@@ -3,7 +3,7 @@ fn main() {
     let mut grammar = Grammar::new();
 
     grammar.add_production("S", vec!["AB"], true);
-    grammar.add_production("A", vec!["a", "ε"], false);
+    grammar.add_production("A", vec!["aA", "ε"], false);
     grammar.add_production("B", vec!["b"], false);
 
     println!("Original Grammar:");
@@ -15,7 +15,7 @@ fn main() {
         println!("FIRST({}) = {:?}", nt, fs);
     }
 
-    let follow_sets = grammar.calculate_follow_sets();
+    let follow_sets = grammar.follow_sets.clone();
     println!("\nfollow Sets:");
     for (nt, fs) in follow_sets.iter() {
         println!("follow({}) = {:?}", nt, fs);
@@ -24,9 +24,9 @@ fn main() {
 
 /* 3.1
     let mut grammar = Grammar::new();
-    grammar.add_production("S", vec!["S+T", "T"]);
-    grammar.add_production("T", vec!["T*F", "F"]);
-    grammar.add_production("F", vec!["(E)", "id"]);
+    grammar.add_production("S", vec!["S+T", "T"], true);
+    grammar.add_production("T", vec!["T*F", "F"]， false);
+    grammar.add_production("F", vec!["(E)", "id"], false);
 
     println!("Original Grammar:");
     grammar.display();
@@ -40,8 +40,8 @@ fn main() {
 /* 3.2
     let mut grammar = Grammar::new();
 
-    grammar.add_production("S", vec!["apple", "apply", "application", "ball", "bat", "bath", "Xb"]);
-    grammar.add_production("X", vec!["ab", "ac", "ad"]);
+    grammar.add_production("S", vec!["apple", "apply", "application", "ball", "bat", "bath", "Xb"], false);
+    grammar.add_production("X", vec!["ab", "ac", "ad"], false);
 
     println!("Original Grammar:");
     grammar.display();
@@ -54,25 +54,29 @@ fn main() {
 /* 3.3
     let mut grammar = Grammar::new();
 
-    grammar.add_production("S", vec!["AB"]);
-    grammar.add_production("A", vec!["a", "ε"]);
-    grammar.add_production("B", vec!["b"]);
+    grammar.add_production("S", vec!["AB"], false);
+    grammar.add_production("A", vec!["a", "ε"], false);
+    grammar.add_production("B", vec!["b", false]);
 
-    grammar.add_production("E", vec!["T X"]);
-    grammar.add_production("X", vec!["+ T X", "ε"]);
-    grammar.add_production("T", vec!["F Y"]);
-    grammar.add_production("Y", vec!["* F Y", "ε"]);
-    grammar.add_production("F", vec!["( E )", "d"]);
+    grammar.add_production("S", vec!["AB"], true);
+    grammar.add_production("A", vec!["aA", "ε"], false);
+    grammar.add_production("B", vec!["b"], false);
 
-    grammar.add_production("P", vec!["i E t S", "a"]);
-    grammar.add_production("E", vec!["b"]);
-    grammar.add_production("T", vec![";"]);
-    grammar.add_production("S", vec!["a S e", "ε"]);
+    grammar.add_production("E", vec!["T X"], false);
+    grammar.add_production("X", vec!["+ T X", "ε"], false);
+    grammar.add_production("T", vec!["F Y"], false);
+    grammar.add_production("Y", vec!["* F Y", "ε"], false);
+    grammar.add_production("F", vec!["( E )", "d"], false);
 
-    grammar.add_production("Q", vec!["R Q'"]);
-    grammar.add_production("Q'", vec!["+ R Q'", "ε"]);
-    grammar.add_production("R", vec!["c R'"]);
-    grammar.add_production("R'", vec!["* c R'", "ε"]);
+    grammar.add_production("P", vec!["i E t S", "a"], false);
+    grammar.add_production("E", vec!["b"], false);
+    grammar.add_production("T", vec![";"], false);
+    grammar.add_production("S", vec!["a S e", "ε"], false);
+
+    grammar.add_production("Q", vec!["R Q'"], false);
+    grammar.add_production("Q'", vec!["+ R Q'", "ε"], false);
+    grammar.add_production("R", vec!["c R'"], false);
+    grammar.add_production("R'", vec!["* c R'", "ε"], false);
 
 
     println!("Original Grammar:");

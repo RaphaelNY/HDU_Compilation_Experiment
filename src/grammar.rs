@@ -53,7 +53,7 @@ impl Grammar {
         }
 
         self.first_sets = self.calculate_first_sets();
-        // self.calculate_follow_sets();
+        self.calculate_follow_sets();
     }
 
     pub fn eliminate_left_recursion(&mut self) {
