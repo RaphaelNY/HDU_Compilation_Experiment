@@ -15,6 +15,15 @@ fn main() {
         println!("The grammar is not LL(1)");
     }
 
+    let table = grammar.create_predictive_parsing_table();
+    grammar.display_predictive_parsing_table(&table);
+
+
+    match grammar.ll1_parse("aab") {
+        Ok(_) => println!("Parsing successful"),
+        Err(err) => println!("Parsing failed: {}", err),
+    }
+
 }
 
 /* 3.1
@@ -77,9 +86,41 @@ fn main() {
     println!("Original Grammar:");
     grammar.display();
 
-    let first_sets = grammar.calculate_first_sets();
+    let first_sets = grammar.first_sets.clone();
     println!("\nFIRST Sets:");
     for (nt, fs) in first_sets {
         println!("FIRST({}) = {:?}", nt, fs);
+    }
+
+    let follow_sets = grammar.follow_sets.clone();
+    println!("\nFOLLOW Sets:");
+    for (nt, fs) in follow_sets {
+        println!("FOLLOW({}) = {:?}", nt, fs);
+    }
+*/
+
+/*
+    let mut grammar = Grammar::new();
+
+    grammar.add_production("S", vec!["AB"], true);
+    grammar.add_production("A", vec!["aA", "ε"], false);
+    grammar.add_production("B", vec!["b"], false);
+
+    println!("Original Grammar:");
+    grammar.display();
+
+    if grammar.is_ll1() {
+        println!("The grammar is LL(1)");
+    } else {
+        println!("The grammar is not LL(1)");
+    }
+
+    let table = grammar.create_predictive_parsing_table();
+    grammar.display_predictive_parsing_table(&table);
+
+
+    match grammar.ll1_parse("aab") {
+        Ok(_) => println!("Parsing successful"),
+        Err(err) => println!("Parsing failed: {}", err),
     }
 */

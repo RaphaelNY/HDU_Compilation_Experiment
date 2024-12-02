@@ -33,6 +33,9 @@ impl Grammar {
             // 将产生式添加到对应的列表中
             entry.push(p.to_string());
             // 按字符迭代处理每个符号
+
+            self.terminals.insert("$".to_string());
+
             for ch in p.chars() {
                 let symbol = ch.to_string();
                 // 检查是否为非终结符
@@ -306,7 +309,7 @@ impl Grammar {
     }
 
     // Helper function to compute the FIRST set of a given production
-    fn first_of(&self, production: &str) -> HashSet<String> {
+    pub fn first_of(&self, production: &str) -> HashSet<String> {
         let mut first_set = HashSet::new();
 
         for symbol in production.chars() {
@@ -316,9 +319,7 @@ impl Grammar {
                 break;
             } else if let Some(non_terminal_first) = self.first_sets.get(&symbol_str) {
                 for item in non_terminal_first {
-                    if item != "ε" {
                         first_set.insert(item.clone());
-                    }
                 }
 
                 if !non_terminal_first.contains("ε") {
@@ -334,9 +335,156 @@ impl Grammar {
         first_set
     }
 
+    // Generate predictive parsing table
+    pub fn create_predictive_parsing_table(&self) -> HashMap<(String, String), Vec<String>> {
+        let mut table: HashMap<(String, String), Vec<String>> = HashMap::new();
+
+        for (non_terminal, productions) in &self.productions {
+            for production in productions {
+                let first_set = self.first_of(production);
+                for terminal in &first_set {
+                    if terminal != "ε" {
+                        table.insert((non_terminal.clone(), terminal.clone()), production.split_whitespace().map(String::from).collect());
+                    }
+                }
+                if first_set.contains("ε") {
+                    if let Some(follow_set) = self.follow_sets.get(non_terminal) {
+                        for terminal in follow_set {
+                            table.insert((non_terminal.clone(), terminal.clone()), production.split_whitespace().map(String::from).collect());
+                        }
+                    }
+                }
+            }
+        }
+
+        table
+    }
+
+    // LL(1) parser implementation using predictive parsing table
+    pub fn ll1_parse(&self, input: &str) -> Result<(), String> {
+        let table = self.create_predictive_parsing_table();
+        let mut stack = vec!["$".to_string()];
+        if let Some(start) = &self.start_symbol {
+            stack.push(start.clone());
+        } else {
+            return Err("Start symbol is not defined".to_string());
+        }
+
+        let mut input_buffer: Vec<String> = input.chars().map(|c| c.to_string()).collect::<Vec<_>>();
+        input_buffer.push("$".to_string());
+
+        while let Some(top) = stack.pop() {
+            let current_symbol = input_buffer.first().unwrap().clone();
+            if current_symbol != "$".to_string() {
+                if self.terminals.contains(&top) || top == "$" {
+                    if top == current_symbol {
+                        input_buffer.remove(0);
+                        display_stack(&stack);
+                    } else {
+                        return Err(format!("Syntax error: expected {}, found {}", top, current_symbol));
+                    }
+                }
+                else if self.non_terminals.contains(&top) {
+                    if let Some(productions) = table.get(&(top.to_string(), current_symbol.clone())) {
+                        for production in productions {
+                            for symbol in production.chars().rev() {
+                                if symbol != 'ε' {
+                                    stack.push(symbol.to_string());
+                                }
+                            }
+                            display_stack(&stack);
+                        }
+                    } else {
+                        return Err(format!("Syntax error: no rule for {} when seeing {}", top, current_symbol));
+                    }
+                } else {
+                    return Err(format!("Unknown symbol on stack: {}", top));
+                }
+            }
+
+        }
+
+        if input_buffer.len() == 1 && input_buffer[0] == "$" {
+            Ok(())
+        } else {
+            Err("Syntax error: input not fully consumed".to_string())
+        }
+    }
+
     pub fn display(&self) {
         for (non_terminal, productions) in &self.productions {
             println!("{} -> {}", non_terminal, productions.join(" | "));
         }
+    }
+
+    pub fn display_predictive_parsing_table(&self, table: &HashMap<(String, String), Vec<String>>) {
+        // Collect all non-terminals and terminals for table formatting
+        let mut non_terminals: HashSet<String> = HashSet::new();
+        let mut terminals: HashSet<String> = HashSet::new();
+
+        for ((non_terminal, terminal), _) in table {
+            non_terminals.insert(non_terminal.clone());
+            terminals.insert(terminal.clone());
+        }
+
+        let mut non_terminals: Vec<String> = non_terminals.into_iter().collect();
+        let mut terminals: Vec<String> = terminals.into_iter().collect();
+        non_terminals.sort();
+        terminals.sort();
+
+        // Print header row
+        print!("\nPredictive Parsing Table:\n\n");
+        print!("{:>10} |", "");
+        for terminal in &terminals {
+            print!("{:>15} |", terminal);
+        }
+        println!();
+        print!("{:->15}-", "");
+        for _ in &terminals {
+            print!("{:->15}-", "");
+        }
+        println!();
+
+        for non_terminal in &non_terminals {
+            if non_terminal == self.start_symbol.as_ref().unwrap() {
+                print!("{:>10} |", non_terminal);
+                for terminal in &terminals {
+                    if let Some(production) = table.get(&(non_terminal.clone(), terminal.clone())) {
+                        // 修改这里来包含非终结符和产生式的格式
+                        let production_str = format!("{} -> {}", non_terminal, production.join(" "));
+                        print!("{:>15} |", production_str);
+                    }
+                    else {
+                        print!("{:>15} |", "");
+                    }
+                }
+                println!();
+            }
+        }
+        for non_terminal in &non_terminals {
+            if non_terminal != self.start_symbol.as_ref().unwrap() {
+                print!("{:>10} |", non_terminal);
+                for terminal in &terminals {
+                    if let Some(production) = table.get(&(non_terminal.clone(), terminal.clone())) {
+                        // 修改这里来包含非终结符和产生式的格式
+                        let production_str = format!("{} -> {}", non_terminal, production.join(" "));
+                        print!("{:>15} |", production_str);
+                    }
+                    else {
+                        print!("{:>15} |", "");
+                    }
+                }
+                println!();
+            }
+        }
+    }
+
+}
+
+// Function to display the current stack status
+fn display_stack(stack: &Vec<String>) {
+    if DEBUG {
+        let stack_content: Vec<String> = stack.iter().map(|s| s.to_string()).collect();
+        println!("Stack: [{}]", stack_content.join(", "));
     }
 }
