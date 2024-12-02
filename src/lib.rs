@@ -3,6 +3,7 @@ mod dfa;
 
 use nfa::*;
 use std::fs::File;
+use std::io;
 use std::io::Write;
 
 
@@ -173,6 +174,27 @@ pub fn write_to_file(filename: &str, contents: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+
+pub fn input() -> String {
+    println!("Enter a regular expression:");
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    input.trim().to_string()
+}
+
+pub fn dot(nfa: NFA) {
+    let dot_output = nfa.to_dot();
+    // 假设你已经有函数来写入文件
+    write_to_file("nfa.dot", &dot_output).expect("TODO: panic message");
+
+    let mut dfa = nfa.to_dfa();
+    let dot_output = dfa.to_dot();
+    write_to_file("dfa.dot", &dot_output).unwrap();
+
+    dfa.minimize();
+    let dot_output = dfa.to_dot();
+    write_to_file("minimized_dfa.dot", &dot_output).unwrap();
+}
 
 #[cfg(test)]
 mod tests {
