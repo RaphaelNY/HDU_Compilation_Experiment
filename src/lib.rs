@@ -61,6 +61,8 @@ pub fn task3_2(grammar: &mut grammar::Grammar) {
 pub fn task3_3(grammar: &mut grammar::Grammar) {
 	println!("Original Grammar:");
 	grammar.display();
+	grammar.first_sets = grammar.calculate_first_sets();
+	grammar.calculate_follow_sets();
 	let first_sets = grammar.first_sets.clone();
 	println!("\nFIRST Sets:");
 	for (nt, fs) in first_sets {
@@ -76,6 +78,8 @@ pub fn task3_3(grammar: &mut grammar::Grammar) {
 pub fn task3_4(grammar: &mut grammar::Grammar) {
 	println!("Original Grammar:");
 	grammar.display();
+	grammar.first_sets = grammar.calculate_first_sets();
+	grammar.calculate_follow_sets();
 
 	if grammar.is_ll1() { println!("The grammar is LL(1)");	} else { println!("The grammar is not LL(1)"); }
 	let table = grammar.create_predictive_parsing_table();

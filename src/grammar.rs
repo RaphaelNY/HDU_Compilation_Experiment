@@ -54,12 +54,13 @@ impl Grammar {
         if is_start_symbol {
             self.start_symbol = Some(non_terminal.to_string());
         }
-
+        /*
         if !self.start_symbol.is_none() {
             self.eliminate_left_recursion();
             self.first_sets = self.calculate_first_sets();
             self.calculate_follow_sets();
         }
+        */
     }
 
     pub fn eliminate_left_recursion(&mut self) {
@@ -322,7 +323,9 @@ impl Grammar {
                 break;
             } else if let Some(non_terminal_first) = self.first_sets.get(&symbol_str) {
                 for item in non_terminal_first {
+                    if item != "ε" {
                         first_set.insert(item.clone());
+                    }
                 }
 
                 if !non_terminal_first.contains("ε") {
