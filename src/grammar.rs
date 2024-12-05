@@ -238,46 +238,71 @@ impl Grammar {
         for nt in &self.non_terminals {
             self.follow_sets.entry(nt.clone()).or_insert_with(HashSet::new);
         }
-        // 设置起始符号的 FOLLOW 集，通常包含一个特殊的结束符号 "$"
+        // 设置起始符号的 FOLLOW 集
         if let Some(start_symbol) = self.start_symbol.clone() {
-            self.follow_sets.entry(start_symbol.clone()).or_insert_with(HashSet::new).insert("$".to_string());
+            self.follow_sets.entry(start_symbol.clone())
+                .or_insert_with(HashSet::new)
+                .insert("$".to_string());
         }
 
         loop {
             let mut changed = false;
+
             for (lhs, productions) in &self.productions {
                 for production in productions {
                     let symbols: Vec<String> = production.chars().map(|c| c.to_string()).collect();
+                    let mut symbols: Vec<String> = Vec::new();
+                    let mut current_symbol = String::new();
+                    // 按字符遍历产生式字符串，处理多字符非终结符
+                    for ch in production.chars() {
+                        if ch == '\'' { // 如果是撇号，则与前一个字符组合成一个符号
+                            current_symbol.push(ch);
+                        } else {
+                            if !current_symbol.is_empty() {
+                                symbols.push(current_symbol.clone());
+                                current_symbol.clear();
+                            }
+                            current_symbol.push(ch);
+                        }
+                    }
+                    if !current_symbol.is_empty() {
+                        symbols.push(current_symbol.clone());
+                    }
+
                     let mut trailer = self.follow_sets.get(lhs).unwrap().clone();
 
+                    // 从右到左遍历产生式
                     for i in (0..symbols.len()).rev() {
                         let symbol = &symbols[i];
+
                         if self.non_terminals.contains(symbol) {
-                            let before_size = self.follow_sets[symbol].len();
-                            self.follow_sets.get_mut(symbol).unwrap().extend(trailer.clone());
-                            if self.follow_sets[symbol].len() != before_size {
+                            // 如果是非终结符，更新其 FOLLOW 集
+                            let follow_set = self.follow_sets.get_mut(symbol).unwrap();
+                            let before_size = follow_set.len();
+                            follow_set.extend(trailer.clone());
+                            if follow_set.len() != before_size {
                                 changed = true;
                             }
-                        }
 
-                        if i > 0 {
-                            trailer.clear();
-                            if self.non_terminals.contains(&symbols[i - 1]) {
-                                if let Some(first_next) = self.first_sets.get(symbol) {
+                            // 更新 trailer，考虑 FIRST 集
+                            if let Some(first_next) = self.first_sets.get(symbol) {
+                                // 加入 FIRST(symbol) 除去 ε 的部分
+                                trailer.extend(first_next.iter().filter(|&n| n != "ε").cloned());
+                                // 若 FIRST(symbol) 包含 ε，则保留 trailer 不变
+                                if !first_next.contains("ε") {
+                                    trailer.clear();
                                     trailer.extend(first_next.iter().filter(|&n| n != "ε").cloned());
-                                    if first_next.contains("ε") {
-                                        trailer.extend(self.follow_sets.get(lhs).unwrap().iter().cloned());
-                                    }
                                 }
                             }
-                        }
-                        else {
+                        } else {
+                            // 遇到终结符，更新 trailer 为当前符号
                             trailer.clear();
-                            trailer.extend(self.follow_sets.get(lhs).unwrap().iter().cloned());
+                            trailer.insert(symbol.clone());
                         }
                     }
                 }
             }
+
             if !changed {
                 break;
             }
@@ -386,28 +411,48 @@ impl Grammar {
                     if top == current_symbol {
                         input_buffer.remove(0);
                         display_stack(&stack);
-                    } else {
+                    }
+                    else {
                         return Err(format!("Syntax error: expected {}, found {}", top, current_symbol));
                     }
                 }
                 else if self.non_terminals.contains(&top) {
                     if let Some(productions) = table.get(&(top.to_string(), current_symbol.clone())) {
                         for production in productions {
-                            for symbol in production.chars().rev() {
-                                if symbol != 'ε' {
+                            let mut symbols: Vec<String> = Vec::new();
+                            let mut current_symbol = String::new();
+                            // 按字符遍历产生式字符串，处理多字符非终结符
+                            for ch in production.chars() {
+                                if ch == '\'' { // 如果是撇号，则与前一个字符组合成一个符号
+                                    current_symbol.push(ch);
+                                } else {
+                                    if !current_symbol.is_empty() {
+                                        symbols.push(current_symbol.clone());
+                                        current_symbol.clear();
+                                    }
+                                    current_symbol.push(ch);
+                                }
+                            }
+                            if !current_symbol.is_empty() {
+                                symbols.push(current_symbol.clone());
+                            }
+
+                            for symbol in symbols.iter().rev() {
+                                if symbol != "ε" {
                                     stack.push(symbol.to_string());
                                 }
                             }
                             display_stack(&stack);
                         }
-                    } else {
+                    }
+                    else {
                         return Err(format!("Syntax error: no rule for {} when seeing {}", top, current_symbol));
                     }
-                } else {
+                }
+                else {
                     return Err(format!("Unknown symbol on stack: {}", top));
                 }
             }
-
         }
 
         if input_buffer.len() == 1 && input_buffer[0] == "$" {

@@ -8,6 +8,8 @@ fn main() {
         println!("2. use the task3_2 default grammar");
         println!("3. use the task3_3 default grammar");
         println!("4. use the task3_4 default grammar");
+        println!("6");
+        println!("7");
         println!("5. quit");
         let mut num = String::new();
         io::stdin().read_line(&mut num).expect("Failed to read line");
@@ -23,6 +25,7 @@ fn main() {
                 println!("2. eliminate left common factor");
                 println!("3. find first and follow sets");
                 println!("4. check if the grammar is LL(1)");
+
                 let mut task = String::new();
                 io::stdin().read_line(&mut task).expect("Failed to read line");
                 let task: u32 = task.trim().parse().expect("Please type a number!");
@@ -58,6 +61,19 @@ fn main() {
                 task3::task3_4(&mut grammar);
             },
             5 => return,
+            6 => {
+                grammar.add_production("S", vec!["MH", "a"], true);
+                grammar.add_production("H", vec!["LSo", "ε"], false);
+                grammar.add_production("K", vec!["dML","ε"], false);
+                grammar.add_production("L", vec!["eHf"], false);
+                grammar.add_production("M", vec!["K","bLM"], false);
+                task3::task3_3(&mut grammar);
+            }
+            7 => {
+                grammar.add_production("S", vec!["a", "^", "(T)"], true);
+                grammar.add_production("T", vec!["T,S", "S"], false);
+                task3::task3_4_1(&mut grammar);
+            }
             _ => println!("Please type a number between 0 and 5"),
         }
     }
